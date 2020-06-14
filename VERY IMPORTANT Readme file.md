@@ -44,7 +44,7 @@ RUN INSTRUCTIONS:
 6. Execute mst.[CheckSystemsForProcess]
 
 Premise and scope:
-  When creating a Data Warehouse system, developers are working not only designing the architecture of the database, but they also build the Data Integration (Extract) side, the Data Transformation side and the Loading (Merging) side. This project will focus on lifting some of the workload (if not all) of the latter.
+  When creating a Data Warehouse system, developers are working not only on designing the architecture of the database, but they also build the Data Integration (Extract) side, the Data Transformation side and the Loading (Merging) side. This project will focus on lifting some of the workload (if not all) of the latter.
   
   When it comes to building the loading side of the project, developers have to carefully consider every container/table from the transformation/staging side, and meticulously map every bit of the metadata with the final containers/tables, where the polished form of the data will be stored. 
 This often involves creating complex merge scripts, depending on different columns being assigned to different slowly changing dimension types, and having the code execute in a correct order so that no constraint will be violated. This work has to be bespoke for every table and has to be done for every table, which can take a considerable abmount of time. This is what this project will try to address.
