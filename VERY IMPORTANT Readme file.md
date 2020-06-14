@@ -1,4 +1,8 @@
 # Autonomous-Accumulating-Snapshot-Fact-Table-Architecture
+
+### I SUGGEST VIEWING THIS IN RAW FORMAT, USING THE RAW BUTTON FROM THE HEADER ###
+
+
 Author: Denis Stepan
 First Uploaded: 14/06/2020
 Last Edit: 14/06/2020
