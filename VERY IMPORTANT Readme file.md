@@ -7,6 +7,8 @@ Author: Denis Stepan
 First Uploaded: 14/06/2020
 Last Edit: 14/06/2020
 
+IMPORTANT: All data used in this project is fictitious, based on AdventureWorks2017 DB and random names that came to my mind.
+
 Short Description:
 This Timespan Accumulating Snapshot Fact Table architecture attempts to make the Data Warehouse ETL process somewhat autonomous, and help the developer by reducing the amount of thought and code that needs to go into designing bespoke staging to final merge scripts, or even building full Transform and Load processes for each system.
 It does so by mapping common SCD Types patterns into code and then uses the available metadata to compute carefully put together scripts.
