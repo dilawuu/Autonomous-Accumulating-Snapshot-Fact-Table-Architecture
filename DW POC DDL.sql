@@ -1,7 +1,7 @@
---CREATE DATABASE [POC_DW];
---GO
---USE POC_DW;
---GO
+CREATE DATABASE [POC_DW];
+GO
+USE POC_DW;
+GO
 -- Dyanmic script to drop constraints and tables, should rebuilding the structure be required
 --DECLARE @SQL NVARCHAR(150), @Constraint VARCHAR(75), @Table VARCHAR(50), @Increment TINYINT= 0, @Schema VARCHAR(5)= '';
 --WHILE @Increment <
@@ -82,12 +82,12 @@
 --        EXECUTE (@SQL);
 --    END;
 --GO
---CREATE SCHEMA mst AUTHORIZATION dbo;
---GO
---CREATE SCHEMA stg AUTHORIZATION dbo;
---GO
---CREATE SCHEMA raw AUTHORIZATION dbo;
---GO
+CREATE SCHEMA mst AUTHORIZATION dbo;
+GO
+CREATE SCHEMA stg AUTHORIZATION dbo;
+GO
+CREATE SCHEMA raw AUTHORIZATION dbo;
+GO
 -- Staging Maintenance will store metadata for every raw/staging table, using a DB-level trigger. This will be useful when auto-truncating raw and staging as part of the ETL process.
 
 CREATE TABLE [mst].[stagingMaintenance]
