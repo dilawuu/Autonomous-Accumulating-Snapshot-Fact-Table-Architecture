@@ -1,6 +1,7 @@
 # Autonomous-Accumulating-Snapshot-Fact-Table-Architecture
 
 ### I SUGGEST VIEWING THIS IN RAW FORMAT, USING THE RAW BUTTON FROM THE HEADER ###
+### The default view breaks my indenting ###
 
 
 Author: Denis Stepan
