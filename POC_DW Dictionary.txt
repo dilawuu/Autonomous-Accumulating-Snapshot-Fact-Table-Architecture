@@ -1,0 +1,156 @@
+
+HOW TO USE THE DICTIONARY:
+Simply use CTRL+F to search for the name of the object you'd like to understand more about.
+
+[tr_newStaging]:
+
+<<tr_newStaging will fire only when there's a CREATE or ALTER DML executed for a table that's part of the raw/staging schema. This will help keep a record of all tables that require truncation as part of the DW daily maintenance job.
+Yes, we truncate both raw and staging as we keep a record of the data in Azure DataLake>>
+
+
+[mst].[FactMergeComponents]:
+
+<<This table stores all 3 components of the merge statement for the fact table. 
+Metadata will be inserted via SP [mst].[AddFactMergeComponent] into mst.FactMergeComponents, where the computed column [MergeStatement] will compute the merge script based on metadata (columns, condition and exception) and component number.
+
+Component 1 will insert NEW rows. Example: New Work Item / Ticket has been created
+Component 2 will account for changes where a new entry for an already existing item has been created, for example when attributes such as status have changed, by updating the last current record for the work item and inserting the new current record. Example: An existing Work Item / Ticket moves from Paused to In Progress.
+
+Because of the nature of this fact table we have to store the end date/time until when the item is to be considered current; therefore, every item that is still in progress (has a NULL end date/time) will have a value of -1 (SK linking to dim_Date and dim_Time) for both the date and time snapshot. For the date snapshot, -1 links back to 31/12/2050, whereas for the time snapshot, it links to 23:59:59. Storing NULL across all the columns for each of those dimensions wasn't possible as some of the Tabular Model measures would throw errors if encountering a blank cell in the dataset when computing an output.
+
+Component 3 will check whether the SK for end date/time has changed from -1 (undetermined) to anything else. You would need to use an undetermined date/time in order to store the snapshot of a Work Item or Ticket that is currently in an intermediary process (i.e. Paused/Not Started/In Progress), and is bound to change status in the future. 
+If it's changed status, this means that the item is completed or cancelled, so this component will update the end date/time of what was previously the current record, and updates the SnapshotCurrent field to reflect that this is no longer the latest entry for the item. 
+(Component 2 would have already inserted the new entry for cancelled or completed status, as it accounts for the scenario when the current row is no longer valid (due to the item switching to a new status) and therefore generated a new row to reflect the change).>>
+
+
+[mst].[AddFactMergeComponent]:
+
+<<This SP will take key elements that will be used to process specific conditions that pertain to the fact table. These key elements will be inserted into mst.FactMergeComponents, where the computed column [MergeStatement] will compute the merge script based on metadata (columns, condition and exception) and component number.
+
+These key elements are: 
+ - SourceTable 
+ - TargetTable 
+ - ConditionColumns1: This will be used to compute the merge part where we insert new rows only, so this will be your fact table composite primary key. Example: StaffSK, WorkItemSK, SnapshotStartDateSK, SnapshotStartTimeSK, StatusSK
+ - ConditionColumns2: This will be used to compute the merge part where we detect when an existing item has changed status. Example: StaffSK, LocationSK, WorkItemSK
+ - ExceptionColumns:  In order for ConditionColumns1 to facilitate the insertion of new items only and prevent inserting new entries for the same existing item (i.e. a change in the status), we need an exception clause to exclude new entries for existing items
+ - MergingColumns:	  List of all the columns in the fact table. They will be used mostly within the [MergeStatement] computed column within mst.[FactMergeComponents]
+
+
+ Once all elements are computed, they will be inserted in mst.[FactMergeComponents], where the merge statement will be computed for each of the 3 scenarios.>>
+
+
+[mst].[AddDimensionMergeComponent]:
+
+<<This SP will compute the filter component of the merge statement with the appropriate SCD Type logic
+
+LEGEND: "SourceCOLUMN_NAMEID" is always the Business Key 
+
+Example of SP calling to compute component for SCD Type 1 for column "imgURL": EXECUTE [mst].[AddDimensionMergeComponent] 'stg.dim_Employee', 'dbo.dim_Employee', 'SourceEmployeeID', imgURL, 1
+Example of SP calling to compute component for SCD Type 2 for columns "EmployeeName, Role, EndDate, ManagerID": EXECUTE [mst].[AddDimensionMergeComponent] 'stg.dim_Employee', 'dbo.dim_Employee', 'SourceEmployeeID', EmployeeName, Role, EndDate, ManagerID, 2
+
+Output for above SP executions:
+1 - WHEN MATCHED AND EXISTS (SELECT source.imageURL EXCEPT SELECT target.imageURL) THEN UPDATE SET target.imageURL = source.imageURL
+2 - WHEN MATCHED AND target.ValidTo IS NULL AND EXISTS (SELECT source.EmployeeName, source.Role, source.EndDate, source.ManagerID EXCEPT SELECT target.EmployeeName, target.Role, target.EndDate, target.ManagerID) THEN UPDATE SET ValidTo = GETDATE(), CurrentFlag = 0>>
+
+
+mst.[sp_mergeFinal]:
+
+<<
+This SP is split in two:
+  - The first part only executes if we're processing a dimension table, due to it being very different from the fact table (duh!), most notable differences being SCD Types and Identity columns bypassing.
+  - The second part only executes for a fact table.
+
+
+First Part [Dimension]:
+	After we've established the SourceTable, TargetTable, ColumnList and that it's got an identity, we obtain the SCD components that we've stored in mst.[DimensionMergeComponents]. 
+	We create a global temp table (it needs to be global in order to be accessible from both within and outside of the dynamic sql) to replicate all columns of the table in question. All columns apart from the last one in each table will be of VARCHAR(300) apart from the last one being a BIT column.
+	This temp table acts as an intermediary container for the data, where the data will be inserted prior to it then being merged with the final fact table. 
+
+	This is necessary in order to overcome the below error SQL constantly kept spitting me with:
+	"The target table 'dbo.fact_WorkItemStateHistory' of the INSERT statement cannot be on either side of a (primary key, foreign key) relationship when the FROM clause contains a nested INSERT, UPDATE, DELETE, or MERGE statement. Found reference constraint 'FK__fact_Work__WorkI__4F7CD00D'."
+
+	Once the temp table is created, we can proceed in computing the Dynamic SQL for the merge. The first component to this will be a basic merge for any new rows that don't exist in the target dimension yet. To that we append the SCD Types 1 and 2, if there are any. Once we've got this, we're ready to execute the merge and insert new rows while accounting for SCD Types where needed.
+
+
+
+
+Second Part [Fact]:
+	Once SourceTable, TargetTable and ColumnList have been established, we create the temp table required for the merge. 
+	
+	At this point, you'll notice I'm implicitly creating a local temp table called #forceOrder. You can replace that with your target fact table. This is a completely optional and custom thing, here's why:
+		- For this particular project, I used DAX to compute a calculated table that expands every Start to End interval for every WorkItem entry, in order to enable reporting that provides the "Close of play" status of every WorkItem, on any given day. The ability to query the model in this way was very important, as it allowed us to filter for just one day and see the state of affairs for that day, for every WorkItem, together with some other calculated values such as IsOverdue, DaysOverSLA, etc. Imagine this view as being one where you look back in time and see what was current then.
+		  However, because the new calculated table didn't have a row number identifier, one had to be computed in order to be used for the purposes of calculating exactly which row number from the now expanded WorkItem fact table was the current record for each day.
+		  The problem with this is that my DAX logic now required that any new WorkItems be inserted in an ascending order, rather than randomly. Obviously, SQL couldn't care less about my order requirement, so I used a temp table and put a clustered index on it according to my desired order, in order to force the engine to read the clustered index and not the table heap, and thus inserting the rows in an ordered fashion.
+		  This was a one-off requirement for this scenario and I don't recommend this practice unless absolutely required.
+
+	Once we've past this point, we append all 3 components of the fact merge, that we stored in mst.FactMergeComponents, to the @MergeSQL variable and then execute it.
+
+	Merge is now complete.>>
+
+
+[mst].[loadStagingToFinal]:
+
+<<This SP will initiate the merge process (this process spans over multiple SPs) for the table input type (i.e. fact or dim).>>
+
+In this SP we'll get the number of tables to iterate through, depending of the table input, in order to obtain the source table syntax (i.e. stg.dim_Employee), the target table syntax (i.e. dbo.dim_Employee), the full column list for the table in within the current iteration, and determine whether the table has an identity column.
+
+All these parameters will get passed through to mst.[sp_mergeFinal], which will compute the dynamic SQL for the merge and execute it.>>
+
+
+mst.[MergingFlow]:
+
+<<This table will store a 10,000 feet view of the process flow to be executed for each system, when re-processing is required.
+
+This requires manual inserts as it requires careful mapping of every step of the flow; however, making this a fully autonomous insert is not outside the realm of possibility.
+The table will be used to iterate and execute through every step and sub-step (step component) for the system within the current iteration of the process.>>
+
+
+mst.[MergeFlowMaster]:
+
+<<This table will store a summary of every DW system and a reference of the SP required to call in order to process the System. By default, every system is locked, marking the System as not ready for (re-)processing.
+A Locked value of 0 means that the system is not locked, and thus will be picked up by mst.[CheckSystemsForProcess], which will trigger the (re-)processing of every unlocked system, and then locking it back again once processing is finished.>>
+
+
+[mst].[SystemRawTablesMapping]:
+
+<<This table will map every raw table to every DW system, so that mst.[CheckSystemsForProcess] will iterate through every raw table, check whether all raw tables are populated, thus establishing which systems require (re-)processing by performing an update on mst.[MergeFlowMaster] and marking them as unlocked.
+
+Just like mst.[MergingFlow], a manual insertion is performed here, however making this autonomous wouldn't be a problem.>>
+
+
+mst.[MergeFlow]:
+
+<<This SP iterates through every step and sub-step (step component) for the system it's been called to process, executing the referenced SPs found in table mst.[MergingFlow]. This process will ensure it executes a copy from raw to staging, perform any transformation required, and then merge staging with final tables (fact/dim).>>
+
+
+
+
+mst.[ProcessUnlockedSystems]:
+
+<<This SP will query the mst.[MergeFlowMaster] table and will iterate through every unlocked DW system, calling the appropriate SP to trigger the processing for each DW.>>
+
+
+mst.[CheckSystemsForProcess]:
+
+<<This SP will iterate through every raw table for every DW system, mapped in mst.[SystemRawTablesMapping], and check whether all of the raw tables for the currently iterating DW system are populated. If they are, this SP will update the corresponding DW System in mst.[MergeFlowMaster] and mark it as unlocked, and then calls SP mst.[ProcessUnlockedSystems] to process every unlocked DW system.
+
+If even one of the raw tables has not been populated but others have (4/5 populated), this SP will simply move on to the next System and will start check for its raw tables.>>
+
+
+[mst].[TruncateRawStaging]:
+
+<<This SP assumes that you have NO DW Systems processing concurrently, and thus will truncate EVERY staging/raw table, regardless of system.
+
+Of course, this could be improved by making use of what's already in mst.[StagingMaintenance] to make the insert to mst.[SystemRawTablesMapping] autonomous.>>
+
+
+
+
+
+
+
+
+
+
+
+
