@@ -47,12 +47,12 @@ Premise and scope:
   When creating a Data Warehouse system, developers are working not only on designing the architecture of the database, but they also build the Data Integration (Extract) side, the Data Transformation side and the Loading (Merging) side. This project will focus on lifting some of the workload (if not all) of the latter.
   
   When it comes to building the loading side of the project, developers have to carefully consider every container/table from the transformation/staging side, and meticulously map every bit of the metadata with the final containers/tables, where the polished form of the data will be stored. 
-This often involves creating complex merge scripts, depending on different columns being assigned to different slowly changing dimension types, and having the code execute in a correct order so that no constraint will be violated. This work has to be bespoke for every table and has to be done for every table, which can take a considerable abmount of time. This is what this project will try to address.
+This often involves creating complex merge scripts, depending on different columns being assigned to different slowly changing dimension types, and having the code execute in a correct order so that no constraint will be violated. What's more, this work must be bespoke and done for every table, which can take a considerable amount of time. This is what this project will try to address.
 
-  Based on the logic of this project, the developer will no longer need to spend time on thinking, testing and creating bespoke scripts for each table; rather, all the developer will need to do will be to populate some key tables in the master (mst) schema with metadata that pertains to how the code should behave when working with each table.
+  Based on the logic of this project, the developer will no longer need to spend time on thinking, testing and creating bespoke scripts for each table; rather, what the developer will need to do, instead, will be to populate a key table in the master (mst) schema with metadata that pertains to how the code should behave when working with each table.
   
   For example, when designing a merge script from the staging to the final side for a table containing 15 columns, out of which 7 would be of SCD Type 1 and 6 other columns would be SCD Type 2, a developer would have to account not only for the insertion of new records, but also design code on how to behave around columns that are of different SCD Types.
-  Using this system, rather than creating bespoke scripts, as described above, for each table, the developer will have to populate a few tables to specify when merging the dimension what the target, source, key column and SCD Type will be, and the system will take care of everything else. Using string manipulation within computed columns and stored procedures.
+  Using this system, rather than creating bespoke scripts, as described above, for each table, the developer will have to populate one table with metadata to specify the target, source, key column and SCD Type will be, and the system will take care of everything else, using string manipulation within computed columns and stored procedures.
   
 How it helps:
   Say you've got a dimension table such as the below, where imageURL is of SCD Type 1, while StaffName, Role, StartDate, EndDate, ManagerID are of SCD Type 2:
@@ -155,7 +155,7 @@ Instead of thinking, building and testing every line of this code, the developer
   
 
 Methodology:
-  We start off by creating POC_DW (Proof Of Concept_Data Warehouse) database. We then create all of the objects and insert metadata into the objects. We, then, populate the tables in the raw schema with raw data coming from source systems. 
+  We start off by creating POC_DW (Proof Of Concept_Data Warehouse) database. We then create all of the objects and insert metadata into the objects. Afterwards, we populate the tables in the raw schema with raw data coming from source systems. 
   The raw schema contains tables that stores the data as it comes from the source systems, in its original form. Once all of the raw tables are populated (i.e. the daily extract and load job is finished), executing Stored Procedure mst.CheckSystemsForProcess will set in motion the following:
   
   1. It will iterate thorugh every raw table mapped to every DW system in mst.[SystemRawTablesMapping] and check whether all of the raw tables for either system have data in them. Once it's been established which systems have all their raw tables populated, this SP will change the BIT column (column is found in mst.MergeFlowMaster) from Locked to Unlocked, to reflect that the DW system is ready for processing, and call SP [mst].[ProcessUnlockedSystems]
@@ -166,4 +166,4 @@ Methodology:
     III. Populate staging fact table with data from final dimension tables
     IV.  Merge staging fact table with final fact table
     V.   Truncate all raw and staging tables, serially
-  4. Once all the above is executed, the system is updated as being processed, in mst.MergeFlowMaster, and is locked again until another load has been made and the SP is called again.
+  4. Once all the above is executed, the system is marked as being processed, in mst.MergeFlowMaster, and is locked again until another load has been made and the SP is called again.
