@@ -2,7 +2,7 @@ CREATE DATABASE [POC_DW];
 GO
 USE POC_DW;
 GO
--- Dyanmic script to drop constraints and tables, should rebuilding the structure be required
+-- Dynamic script to drop constraints and tables, should rebuilding the structure be required
 --DECLARE @SQL NVARCHAR(150), @Constraint VARCHAR(75), @Table VARCHAR(50), @Increment TINYINT= 0, @Schema VARCHAR(5)= '';
 --WHILE @Increment <
 --(
