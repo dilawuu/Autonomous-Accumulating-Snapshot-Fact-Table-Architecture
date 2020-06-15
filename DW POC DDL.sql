@@ -101,7 +101,7 @@ CREATE TABLE [mst].[stagingMaintenance]
 GO
 
 -- tr_newStaging will fire only when there's a CREATE or ALTER DML executed for a table that's part of the raw/staging schema. This will help keep a record of all tables that require truncation as part of the DW daily maintenance job.
--- Yes, we truncate both raw and staging as we keep a record of the data in Azure DataLake
+-- In our case, we truncate both raw and staging as we keep a record of the data in Azure DataLake
 
 CREATE OR ALTER TRIGGER [tr_newStaging] ON DATABASE FOR CREATE_TABLE, ALTER_TABLE AS
 BEGIN
