@@ -1,7 +1,7 @@
 # Autonomous Timespan Accumulating Snapshot Fact Table Architecture
 
 #### IMPORTANT: All data used in this project is fictitious, based on AdventureWorks2017 DB and random names that came to my mind.
-#### I suggest viewing this in raw format, using the RAW button from the header - the default view breaks my formatting.
+#### I suggest viewing this in raw format, using the RAW button from the header - the default view makes it very difficult to read code blocks.
 
 
 ### Author: Denis Stepan
